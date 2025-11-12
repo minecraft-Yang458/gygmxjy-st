@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服务状态监控 - gygmxjy.dpdns.org</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #3b82f6;
+            --dns-error-color: #8b5cf6;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #1e293b;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        
+        .last-check {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+        
+        .service-grid {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .service-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .service-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .service-info {
+            flex: 1;
+        }
+        
+        .service-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .service-url {
+            color: #64748b;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .status-up {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+        
+        .status-down {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--error-color);
+        }
+        
+        .status-checking {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: var(--warning-color);
+        }
+        
+        .status-dns-error {
+            background-color: rgba(139, 92, 246, 0.1);
+            color: var(--dns-error-color);
+        }
+        
+        .status-server-down {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: var(--info-color);
+        }
+        
+        .response-time {
+            font-size: 0.85rem;
+            color: #64748b;
+            text-align: right;
+        }
+        
+        .status-details {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 30px;
+            gap: 10px;
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #1d4ed8;
+        }
+        
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            justify-content: center;
+        }
+        
+        .summary {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        @media (max-width: 600px) {
+            .service-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .status {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+        .monitor-footer {
+            margin-top: 40px;
+            padding: 15px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #64748b;
+            border-top: 1px solid #e2e8f0;
+            background-color: rgba(248, 250, 252, 0.8);
+            border-radius: 6px;
+        }
+        
+        .monitor-footer a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        
+        .monitor-footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .signature {
+            margin-top: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>服务状态监控</h1>
+        <p class="last-check">最后检查: <span id="lastCheck">-</span></p>
+    </header>
+    
+    <div class="summary">
+        <div id="summaryText">正在检查服务状态...</div>
+    </div>
+    
+    <div class="service-grid" id="serviceGrid">
+        <!-- 服务状态卡片将通过JavaScript动态生成 -->
+    </div>
+    
+    <div class="controls">
+        <button onclick="checkAllServices()">立即检查</button>
+    </div>
+    
+    <div class="auto-refresh">
+        <input type="checkbox" id="autoRefresh" checked>
+        <label for="autoRefresh">每5分钟自动刷新</label>
+    </div>
+    <div class="monitor-footer">
+        <p><strong>监控说明：</strong> 本监控系统基于浏览器网络请求检测服务状态。DNS查询时间和网络波动可能影响检测结果，状态显示仅供参考。如有疑问，请通过其他方式验证服务状态。</p>
+        <p class="signature">Write by DeepSeek</p>
+        <p class="signature">《工业革命：新纪元》项目组</p>
+    </div>
+    <script>
+        // 配置要监控的服务
+        const services = [
+            { 
+                id: 'main', 
+                name: '门户网站', 
+                url: 'https://gygmxjy.dpdns.org',
+                expectedStatus: 200 
+            },
+            { 
+                id: 'www', 
+                name: '主站', 
+                url: 'https://www.gygmxjy.dpdns.org',
+                expectedStatus: 200 
+            },
+            { 
+                id: 'game', 
+                name: '服务器子域', 
+                url: 'https://game.gygmxjy.dpdns.org',
+                expectedStatus: 200 
+            },
+            { 
+                id: 'update', 
+                name: '更新子域', 
+                url: 'https://update.gygmxjy.dpdns.org',
+                expectedStatus: 200 
+            },
+            { 
+                id: 'res', 
+                name: '资源子域', 
+                url: 'https://res.gygmxjy.dpdns.org',
+                expectedStatus: 200 
+            }
+        ];
+
+        // 初始化服务状态卡片
+        function initializeServiceCards() {
+            const grid = document.getElementById('serviceGrid');
+            grid.innerHTML = '';
+            
+            services.forEach(service => {
+                const card = document.createElement('div');
+                card.className = 'service-card';
+                card.id = `card-${service.id}`;
+                card.innerHTML = `
+                    <div class="service-header">
+                        <div class="service-info">
+                            <div class="service-name">${service.name}</div>
+                            <div class="service-url">${service.url}</div>
+                        </div>
+                        <div class="status">
+                            <span id="status-${service.id}" class="status-badge status-checking">检查中...</span>
+                            <div class="response-time" id="time-${service.id}"></div>
+                        </div>
+                    </div>
+                    <div class="status-details" id="details-${service.id}">初始化检查...</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // 使用fetch API进行精确的状态检查
+        async function checkServiceWithFetch(service, startTime) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 8000);
+                
+                const response = await fetch(service.url, {
+                    method: 'GET',
+                    mode: 'no-cors', // 使用no-cors避免CORS问题
+                    signal: controller.signal,
+                    cache: 'no-cache'
+                });
+                
+                clearTimeout(timeoutId);
+                const responseTime = Date.now() - startTime;
+                
+                // 在no-cors模式下，我们无法读取响应状态，但请求成功意味着服务在线
+                return {
+                    success: true,
+                    online: true,
+                    responseTime,
+                    status: 'unknown', // no-cors模式下无法获取状态码
+                    details: '服务响应正常',
+                    method: 'fetch'
+                };
+                
+            } catch (error) {
+                const responseTime = Date.now() - startTime;
+                
+                // 分析错误类型 - 更精确地识别DNS解析失败
+                let errorType = 'unknown';
+                let errorDetails = `错误: ${error.message}`;
+                
+                if (error.name === 'AbortError') {
+                    errorType = 'timeout';
+                    errorDetails = '请求超时 (8秒) - 服务可能无响应';
+                } else if (error.message.includes('Failed to fetch') || 
+                          error.message.includes('NetworkError')) {
+                    // 尝试更精确地区分DNS错误和服务器错误
+                    if (responseTime < 100) {
+                        // 非常快的失败通常是DNS解析问题
+                        errorType = 'dns';
+                        errorDetails = 'DNS解析失败 - 域名可能未正确配置';
+                    } else {
+                        // 较慢的失败可能是服务器问题
+                        errorType = 'server';
+                        errorDetails = '服务器无响应 - 服务可能未运行';
+                    }
+                }
+                
+                return {
+                    success: false,
+                    online: false,
+                    responseTime,
+                    error: errorType,
+                    details: errorDetails,
+                    method: 'fetch'
+                };
+            }
+        }
+
+        // 使用XMLHttpRequest进行更精确的错误检测
+        function checkServiceWithXHR(service, startTime) {
+            return new Promise((resolve) => {
+                const xhr = new XMLHttpRequest();
+                let timeoutId;
+                
+                timeoutId = setTimeout(() => {
+                    xhr.abort();
+                    resolve({
+                        success: false,
+                        online: false,
+                        responseTime: 8000,
+                        error: 'timeout',
+                        details: '请求超时 (8秒) - 服务可能无响应',
+                        method: 'xhr'
+                    });
+                }, 8000);
+                
+                xhr.timeout = 8000;
+                
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4) {
+                        clearTimeout(timeoutId);
+                        const responseTime = Date.now() - startTime;
+                        
+                        if (xhr.status === service.expectedStatus) {
+                            resolve({
+                                success: true,
+                                online: true,
+                                responseTime,
+                                status: xhr.status,
+                                details: `状态码: ${xhr.status}`,
+                                method: 'xhr'
+                            });
+                        } else if (xhr.status > 0) {
+                            resolve({
+                                success: true,
+                                online: false,
+                                responseTime,
+                                status: xhr.status,
+                                details: `状态码: ${xhr.status} (期望: ${service.expectedStatus})`,
+                                method: 'xhr'
+                            });
+                        } else {
+                            // status为0通常表示网络错误或CORS阻止
+                            // 根据响应时间区分DNS错误和服务器错误
+                            let errorType = 'server';
+                            let errorDetails = '服务器无响应';
+                            
+                            if (responseTime < 100) {
+                                errorType = 'dns';
+                                errorDetails = 'DNS解析失败 - 域名可能未正确配置';
+                            }
+                            
+                            resolve({
+                                success: false,
+                                online: false,
+                                responseTime,
+                                error: errorType,
+                                details: errorDetails,
+                                method: 'xhr'
+                            });
+                        }
+                    }
+                };
+                
+                xhr.onerror = function() {
+                    clearTimeout(timeoutId);
+                    const responseTime = Date.now() - startTime;
+                    
+                    // 根据响应时间区分DNS错误和服务器错误
+                    let errorType = 'server';
+                    let errorDetails = '服务器无响应 - 服务可能未运行';
+                    
+                    if (responseTime < 100) {
+                        errorType = 'dns';
+                        errorDetails = 'DNS解析失败 - 域名可能未正确配置';
+                    }
+                    
+                    resolve({
+                        success: false,
+                        online: false,
+                        responseTime,
+                        error: errorType,
+                        details: errorDetails,
+                        method: 'xhr'
+                    });
+                };
+                
+                try {
+                    xhr.open('GET', service.url, true);
+                    xhr.send();
+                } catch (e) {
+                    clearTimeout(timeoutId);
+                    const responseTime = Date.now() - startTime;
+                    
+                    // 根据响应时间区分DNS错误和服务器错误
+                    let errorType = 'server';
+                    let errorDetails = `请求异常: ${e.message}`;
+                    
+                    if (responseTime < 100) {
+                        errorType = 'dns';
+                        errorDetails = 'DNS解析失败 - 域名可能未正确配置';
+                    }
+                    
+                    resolve({
+                        success: false,
+                        online: false,
+                        responseTime,
+                        error: errorType,
+                        details: errorDetails,
+                        method: 'xhr'
+                    });
+                }
+            });
+        }
+
+        // 检查单个服务状态 - 使用多种方法确保准确性
+        async function checkService(service) {
+            const startTime = Date.now();
+            const statusElement = document.getElementById(`status-${service.id}`);
+            const timeElement = document.getElementById(`time-${service.id}`);
+            const detailsElement = document.getElementById(`details-${service.id}`);
+            
+            statusElement.textContent = '检查中...';
+            statusElement.className = 'status-badge status-checking';
+            timeElement.textContent = '';
+            detailsElement.textContent = '检查DNS解析和服务可用性...';
+
+            // 方法1: 使用fetch API
+            detailsElement.textContent = '方法1: 使用fetch检测...';
+            const fetchResult = await checkServiceWithFetch(service, startTime);
+            
+            if (fetchResult.online) {
+                // fetch检测成功，服务在线
+                statusElement.textContent = '在线';
+                statusElement.className = 'status-badge status-up';
+                timeElement.textContent = `${fetchResult.responseTime}ms`;
+                detailsElement.textContent = fetchResult.details;
+                return fetchResult;
+            }
+            
+            // 方法2: 使用XMLHttpRequest进行验证
+            detailsElement.textContent = '方法1失败，尝试方法2: 使用XHR验证...';
+            const xhrResult = await checkServiceWithXHR(service, startTime);
+            
+            if (xhrResult.success && xhrResult.online) {
+                statusElement.textContent = '在线';
+                statusElement.className = 'status-badge status-up';
+                timeElement.textContent = `${xhrResult.responseTime}ms`;
+                detailsElement.textContent = xhrResult.details;
+                return xhrResult;
+            } else if (xhrResult.success && !xhrResult.online) {
+                statusElement.textContent = '异常';
+                statusElement.className = 'status-badge status-down';
+                timeElement.textContent = `${xhrResult.responseTime}ms`;
+                detailsElement.textContent = xhrResult.details;
+                return xhrResult;
+            }
+            
+            // 所有方法都失败 - 服务离线
+            const totalTime = Date.now() - startTime;
+            
+            // 根据错误类型准确显示不同的状态
+            const finalError = xhrResult.error || fetchResult.error;
+            
+            if (finalError === 'dns') {
+                statusElement.textContent = 'DNS错误';
+                statusElement.className = 'status-badge status-dns-error';
+                detailsElement.textContent = 'DNS解析失败 - 域名可能未正确配置';
+            } else if (finalError === 'server') {
+                statusElement.textContent = '服务无响应';
+                statusElement.className = 'status-badge status-server-down';
+                detailsElement.textContent = '服务器无响应 - 服务可能未运行';
+            } else {
+                statusElement.textContent = '离线';
+                statusElement.className = 'status-badge status-down';
+                detailsElement.textContent = '服务完全不可达 - 未知错误';
+            }
+            
+            timeElement.textContent = `${totalTime}ms`;
+            
+            return {
+                success: false,
+                online: false,
+                responseTime: totalTime,
+                error: finalError,
+                details: '服务完全不可达'
+            };
+        }
+
+        // 检查所有服务
+        async function checkAllServices() {
+            document.getElementById('lastCheck').textContent = new Date().toLocaleString();
+            document.getElementById('summaryText').textContent = '正在检查服务状态...';
+            
+            let onlineCount = 0;
+            let dnsErrorCount = 0;
+            let serverDownCount = 0;
+            const results = [];
+            
+            // 顺序检查服务，避免并行请求导致的问题
+            for (const service of services) {
+                const result = await checkService(service);
+                results.push(result);
+                
+                if (result.online) {
+                    onlineCount++;
+                } else if (result.error === 'dns') {
+                    dnsErrorCount++;
+                } else if (result.error === 'server') {
+                    serverDownCount++;
+                }
+            }
+            
+            // 更新摘要
+            const totalCount = services.length;
+            const otherErrors = totalCount - onlineCount - dnsErrorCount - serverDownCount;
+            
+            let summaryText = `服务状态: ${onlineCount}/${totalCount} 在线`;
+            
+            if (dnsErrorCount > 0) {
+                summaryText += `, ${dnsErrorCount} 个DNS错误`;
+            }
+            
+            if (serverDownCount > 0) {
+                summaryText += `, ${serverDownCount} 个服务无响应`;
+            }
+            
+            if (otherErrors > 0) {
+                summaryText += `, ${otherErrors} 个其他错误`;
+            }
+            
+            document.getElementById('summaryText').textContent = summaryText;
+        }
+
+        // 页面加载时初始化并开始检查
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeServiceCards();
+            checkAllServices();
+            
+            // 设置自动刷新
+            const autoRefreshCheckbox = document.getElementById('autoRefresh');
+            let refreshInterval;
+            
+            function setupAutoRefresh() {
+                if (autoRefreshCheckbox.checked) {
+                    refreshInterval = setInterval(checkAllServices, 5 * 60 * 1000); // 5分钟
+                } else {
+                    clearInterval(refreshInterval);
+                }
+            }
+            
+            autoRefreshCheckbox.addEventListener('change', setupAutoRefresh);
+            setupAutoRefresh();
+        });
+    </script>
+</body>
+</html>
